@@ -1,0 +1,58 @@
+import requests
+
+class PR:
+    """Represents a Pull Request object."""
+    def __init__(self, number, title, author, checks_passed):
+        self.number = number
+        self.title = title
+        self.author = author
+        self.checks_passed = checks_passed
+
+def fetch_pull_requests(repo_url="https://github.com/venmo/foundations-interview"):
+    """Fetch and parse all PRs from a GitHub repository."""
+    # Extract owner/repo from URL
+    parts = repo_url.rstrip('/').split('/')
+    owner, repo = parts[-2], parts[-1]
+    
+    # GitHub API endpoint for PRs
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
+    params = {"state": "all", "per_page": 100}
+    
+    response = requests.get(api_url, params=params)
+    response.raise_for_status()
+    
+    pull_requests = []
+    for pr_data in response.json():
+        # Check the status of checks/commits for this PR
+        checks_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{pr_data['head']['sha']}/status"
+        checks_response = requests.get(checks_url)
+        
+        checks_passed = True
+        if checks_response.status_code == 200:
+            status_data = checks_response.json()
+            # 'success' means all passed, anything else means not all passed
+            checks_passed = status_data.get('state') == 'success'
+        
+        pr = PR(
+            number=pr_data['number'],
+            title=pr_data['title'],
+            author=pr_data['user']['login'],
+            checks_passed=checks_passed
+        )
+        pull_requests.append(pr)
+    
+    return pull_requests
+
+def generate_report(pull_requests):
+    """Generate a formatted report of PRs."""
+    report_lines = []
+    for pr in pull_requests:
+        symbol = "√" if pr.checks_passed else "x"
+        line = f'{symbol} {pr.author}: #{pr.number} "{pr.title}"'
+        report_lines.append(line)
+    return "\n".join(report_lines)
+
+if __name__ == "__main__":
+    prs = fetch_pull_requests()
+    report = generate_report(prs)
+    print(report)
